@@ -3,17 +3,25 @@ use core::fmt;
 use memory_addr::{AddrRange, MemoryAddr};
 
 use crate::{MappingBackend, MappingError, MappingResult};
+use alloc::{collections::BTreeMap, sync::Arc};
 
 /// A memory area represents a continuous range of virtual memory with the same
 /// flags.
 ///
 /// The target physical memory frames are determined by [`MappingBackend`] and
 /// may not be contiguous.
+#[derive(Clone)]
 pub struct MemoryArea<B: MappingBackend> {
     va_range: AddrRange<B::Addr>,
+    /// Hold pages with RAII.
+    /// The key is the vpn of the page,
+    /// so it must be aligned to PAGE_SIZE_4K.
+    frames: BTreeMap<B::Addr, B::FrameTrackerRef>,
     flags: B::Flags,
     backend: B,
 }
+
+// TODO: should decrease ref of page if mapping is changed.
 
 impl<B: MappingBackend> MemoryArea<B> {
     /// Creates a new memory area.
@@ -21,9 +29,16 @@ impl<B: MappingBackend> MemoryArea<B> {
     /// # Panics
     ///
     /// Panics if `start + size` overflows.
-    pub fn new(start: B::Addr, size: usize, flags: B::Flags, backend: B) -> Self {
+    pub fn new(
+        start: B::Addr,
+        size: usize,
+        frame_alloced: Option<BTreeMap<B::Addr, B::FrameTrackerRef>>,
+        flags: B::Flags,
+        backend: B,
+    ) -> Self {
         Self {
             va_range: AddrRange::from_start_size(start, size),
+            frames: frame_alloced.unwrap_or(BTreeMap::new()),
             flags,
             backend,
         }
@@ -69,22 +84,46 @@ impl<B: MappingBackend> MemoryArea<B> {
     /// Changes the end address of the memory area.
     pub(crate) fn set_end(&mut self, new_end: B::Addr) {
         self.va_range.end = new_end;
+        self.retain_pages_in_range();
+    }
+
+    pub(crate) fn find_frame(&self, vaddr: B::Addr) -> Option<B::FrameTrackerRef> {
+        debug_assert!(vaddr.is_aligned_4k());
+        self.frames.get(&vaddr).cloned()
+    }
+
+    /// Inserts a frame into the memory area.
+    /// Frame will be replaced if vaddr already in frame maps.
+    pub(crate) fn insert_frame(
+        &mut self,
+        vaddr: B::Addr,
+        frame: B::FrameTrackerRef,
+    ) -> Option<<B as MappingBackend>::FrameTrackerRef> {
+        debug_assert!(vaddr.is_aligned_4k());
+        self.frames.insert(vaddr, frame)
     }
 
     /// Maps the whole memory area in the page table.
-    pub(crate) fn map_area(&self, page_table: &mut B::PageTable) -> MappingResult {
-        self.backend
+    pub(crate) fn map_area(&mut self, page_table: &mut B::PageTable) -> MappingResult {
+        let frame_refs = self
+            .backend
             .map(self.start(), self.size(), self.flags, page_table)
-            .then_some(())
-            .ok_or(MappingError::BadState)
+            .or(Err(MappingError::BadState))?;
+        self.frames.extend(frame_refs);
+        Ok(())
     }
 
     /// Unmaps the whole memory area in the page table.
-    pub(crate) fn unmap_area(&self, page_table: &mut B::PageTable) -> MappingResult {
+    pub(crate) fn unmap_area(&mut self, page_table: &mut B::PageTable) -> MappingResult {
+        // Backend::Unmap will not deallocate the frames if feature = "RAII".
         self.backend
             .unmap(self.start(), self.size(), page_table)
             .then_some(())
-            .ok_or(MappingError::BadState)
+            .ok_or(MappingError::BadState)?;
+        // Decrease the ref of frame trackers.
+        #[cfg(feature = "RAII")]
+        self.frames.clear();
+        Ok(())
     }
 
     /// Changes the flags in the page table.
@@ -96,6 +135,15 @@ impl<B: MappingBackend> MemoryArea<B> {
         self.backend
             .protect(self.start(), self.size(), new_flags, page_table);
         Ok(())
+    }
+
+    /// Retains only the pages in [self.va_range].
+    /// called manually when the va_range is changed.
+    fn retain_pages_in_range(&mut self) {
+        // 移除大于等于 end 的部分
+        self.frames.split_off(&self.va_range().end);
+        // 移除小于 start 的部分
+        self.frames = self.frames.split_off(&self.va_range().end);
     }
 
     /// Shrinks the memory area at the left side.
@@ -121,6 +169,8 @@ impl<B: MappingBackend> MemoryArea<B> {
         // Safety: `unmap_size` is less than the current size, so it will never
         // overflow.
         self.va_range.start = self.va_range.start.wrapping_add(unmap_size);
+        self.retain_pages_in_range();
+
         Ok(())
     }
 
@@ -149,6 +199,7 @@ impl<B: MappingBackend> MemoryArea<B> {
 
         // Use wrapping_sub to avoid overflow check, same as above.
         self.va_range.end = self.va_range.end.wrapping_sub(unmap_size);
+        self.retain_pages_in_range();
         Ok(())
     }
 
@@ -166,10 +217,13 @@ impl<B: MappingBackend> MemoryArea<B> {
                 // Use wrapping_sub_addr to avoid overflow check. It is safe because
                 // `pos` is within the memory area.
                 self.end().wrapping_sub_addr(pos),
+                Some(self.frames.split_off(&pos)), // pages retained here
                 self.flags,
                 self.backend.clone(),
             );
             self.va_range.end = pos;
+            // already retained
+            //self.retain_pages_in_range();
             Some(new_area)
         } else {
             None

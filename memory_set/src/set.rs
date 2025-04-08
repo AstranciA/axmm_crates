@@ -1,7 +1,7 @@
 use alloc::collections::BTreeMap;
 #[allow(unused_imports)] // this is a weird false alarm
 use alloc::vec::Vec;
-use core::fmt;
+use core::{error, fmt};
 
 use memory_addr::{AddrRange, MemoryAddr};
 
@@ -56,6 +56,13 @@ impl<B: MappingBackend> MemorySet<B> {
         candidate.filter(|a| a.va_range().contains(addr))
     }
 
+    /// Finds the memory area that contains the given address.
+    pub fn find_mut(&mut self, addr: B::Addr) -> Option<&mut MemoryArea<B>> {
+        let candidate: Option<&mut MemoryArea<B>> =
+            self.areas.range_mut(..=addr).last().map(|(_, a)| a);
+        candidate.filter(|a| a.va_range().contains(addr))
+    }
+
     /// Finds a free area that can accommodate the given size.
     ///
     /// The search starts from the given `hint` address, and the area should be
@@ -90,6 +97,14 @@ impl<B: MappingBackend> MemorySet<B> {
         }
     }
 
+    /// insert an existing memory area into the set.
+
+    /// TODO: using a diffent type of area: no need to unmap the frames. The
+    /// "ghost" one.
+    pub fn insert(&mut self, area: MemoryArea<B>) -> MappingResult {
+        self.areas.insert(area.start(), area);
+        Ok(())
+    }
     /// Add a new memory mapping.
     ///
     /// The mapping is represented by a [`MemoryArea`].
@@ -100,7 +115,7 @@ impl<B: MappingBackend> MemorySet<B> {
     /// error.
     pub fn map(
         &mut self,
-        area: MemoryArea<B>,
+        mut area: MemoryArea<B>,
         page_table: &mut B::PageTable,
         unmap_overlap: bool,
     ) -> MappingResult {
@@ -183,9 +198,24 @@ impl<B: MappingBackend> MemorySet<B> {
         Ok(())
     }
 
+    pub fn find_frame(&self, vaddr: B::Addr) -> Option<B::FrameTrackerRef> {
+        if let Some(area) = self.find(vaddr) {
+            return area.find_frame(vaddr);
+        }
+        None
+    }
+
+    /// Remap a vaddr to a new frame.pub fn remap_frame(&mut self, vaddr:
+    /// B::Addr, new_frame: B::FrameTrackerImpl) {
+    pub fn remap_frame(&mut self, vaddr: B::Addr, new_frame: B::FrameTrackerRef) {
+        if let Some(area) = self.find_mut(vaddr) {
+            area.insert_frame(vaddr, new_frame).expect("Frame not exist");
+        }
+    }
+
     /// Remove all memory areas and the underlying mappings.
     pub fn clear(&mut self, page_table: &mut B::PageTable) -> MappingResult {
-        for (_, area) in self.areas.iter() {
+        for (_, area) in self.areas.iter_mut() {
             area.unmap_area(page_table)?;
         }
         self.areas.clear();
@@ -231,10 +261,8 @@ impl<B: MappingBackend> MemorySet<B> {
                     //        [ prot ]
                     // [ left | area | right ]
                     let right_part = area.split(end).unwrap();
-                    area.set_end(start);
+                    let mut middle_part = area.split(start).unwrap();
 
-                    let mut middle_part =
-                        MemoryArea::new(start, size, area.flags(), area.backend().clone());
                     middle_part.protect_area(new_flags, page_table)?;
                     middle_part.set_flags(new_flags);
 

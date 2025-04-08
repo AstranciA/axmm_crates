@@ -3,14 +3,28 @@
 
 mod addr;
 mod iter;
+mod page;
 mod range;
 
+extern crate alloc;
 pub use self::addr::{MemoryAddr, PhysAddr, VirtAddr};
 pub use self::iter::PageIter;
+pub use self::page::{Page, FrameTracker};
 pub use self::range::{AddrRange, PhysAddrRange, VirtAddrRange};
 
 /// The size of a 4K page (4096 bytes).
 pub const PAGE_SIZE_4K: usize = 0x1000;
+
+/*
+ * /// I want a PS5, PS5
+ *pub struct PS4;
+ *
+ *impl Into<usize> for PS4 {
+ *    fn into(self) -> usize {
+ *        PAGE_SIZE_4K
+ *    }
+ *}
+ */
 
 /// A [`PageIter`] for 4K pages.
 pub type PageIter4K<A> = PageIter<PAGE_SIZE_4K, A>;

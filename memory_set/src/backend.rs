@@ -1,4 +1,8 @@
-use memory_addr::MemoryAddr;
+use core::ops::Deref;
+use alloc::sync::Arc;
+use alloc::collections::BTreeMap;
+
+use memory_addr::{FrameTracker, MemoryAddr};
 
 /// Underlying operations to do when manipulating mappings within the specific
 /// [`MemoryArea`](crate::MemoryArea).
@@ -15,6 +19,22 @@ pub trait MappingBackend: Clone {
     /// The page table type used in the memory area.
     type PageTable;
 
+    #[cfg(feature = "RAII")]
+    type FrameTrackerImpl: FrameTracker;
+    #[cfg(feature = "RAII")]
+    type FrameTrackerRef: Deref<Target = Self::FrameTrackerImpl> + Clone;
+
+    #[cfg(feature = "RAII")]
+    /// What to do when mapping a region within the area with the given flags.
+    fn map(
+        &self,
+        start: Self::Addr,
+        size: usize,
+        flags: Self::Flags,
+        page_table: &mut Self::PageTable,
+    ) -> Result<BTreeMap<Self::Addr, Self::FrameTrackerRef>, ()>;
+
+    #[cfg(not(feature = "RAII"))]
     /// What to do when mapping a region within the area with the given flags.
     fn map(
         &self,
@@ -25,6 +45,7 @@ pub trait MappingBackend: Clone {
     ) -> bool;
 
     /// What to do when unmaping a memory region within the area.
+    /// Should not deallocate frames if RAII is on.
     fn unmap(&self, start: Self::Addr, size: usize, page_table: &mut Self::PageTable) -> bool;
 
     /// What to do when changing access flags.
