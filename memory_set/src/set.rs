@@ -2,8 +2,7 @@ use alloc::collections::BTreeMap;
 #[allow(unused_imports)] // this is a weird false alarm
 use alloc::vec::Vec;
 use core::{error, fmt};
-
-use memory_addr::{AddrRange, MemoryAddr};
+use memory_addr::{AddrRange, MemoryAddr, VirtAddr};
 
 use crate::{MappingBackend, MappingError, MappingResult, MemoryArea};
 
@@ -11,6 +10,8 @@ use crate::{MappingBackend, MappingError, MappingResult, MemoryArea};
 pub struct MemorySet<B: MappingBackend> {
     areas: BTreeMap<B::Addr, MemoryArea<B>>,
 }
+
+
 
 impl<B: MappingBackend> MemorySet<B> {
     /// Creates a new memory set.
@@ -197,6 +198,69 @@ impl<B: MappingBackend> MemorySet<B> {
 
         Ok(())
     }
+
+
+
+
+    pub fn adjust_area(
+        &mut self,
+        area_addr: B::Addr,
+        start:  B::Addr,
+        end:  B::Addr,
+        page_table: &mut B::PageTable,
+    ) -> Result<(), MappingError> {
+        let area = self.areas.get_mut(&area_addr).unwrap();
+        assert!(start.is_aligned_4k());
+        assert!(end.is_aligned_4k());
+
+        // 检查新的范围是否有效
+        if start >= end {
+            return Err(MappingError::InvalidParam);
+        }
+
+        // 当前区域的边界
+        let current_start = area.start();
+        let current_end = area.end();
+
+        // 处理左边界的变化
+        if start != current_start {
+            
+            if start < current_start {
+                // 需要向左扩展
+                // 新的总size = (current_end - start)
+                unsafe {
+                    area.extend_left(current_end.sub_addr(start), page_table)?;
+                }
+            } else {
+                // 需要向右收缩
+                // 新的总size = (current_end - start)
+                unsafe {
+                    area.shrink_left(current_end.sub_addr(start), page_table)?;
+                }
+            }
+        }
+
+        // 处理右边界的变化
+        if end != current_end {
+            if end > current_end {
+                // 需要向右扩展
+                // 新的总size = (end - current_start)
+                unsafe {
+                    area.extend_right(end.sub_addr(current_start), page_table)?;
+                }
+            } else {
+                // 需要向左收缩
+                // 新的总size = (end - current_start)
+                unsafe {
+                    area.shrink_right(end.sub_addr(current_start), page_table)?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+
 
     pub fn find_frame(&self, vaddr: B::Addr) -> Option<B::FrameTrackerRef> {
         if let Some(area) = self.find(vaddr) {
