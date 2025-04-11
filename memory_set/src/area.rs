@@ -18,7 +18,7 @@ pub struct MemoryArea<B: MappingBackend> {
     /// so it must be aligned to PAGE_SIZE_4K.
     frames: BTreeMap<B::Addr, B::FrameTrackerRef>,
     flags: B::Flags,
-    backend: B,
+    pub (crate) backend: B,
 }
 
 // TODO: should decrease ref of page if mapping is changed.
@@ -83,6 +83,7 @@ impl<B: MappingBackend> MemoryArea<B> {
 
     /// Changes the end address of the memory area.
     pub(crate) fn set_end(&mut self, new_end: B::Addr) {
+        
         self.va_range.end = new_end;
         self.retain_pages_in_range();
     }
@@ -146,6 +147,8 @@ impl<B: MappingBackend> MemoryArea<B> {
         self.frames = self.frames.split_off(&self.va_range().end);
     }
 
+    
+    
     /// Shrinks the memory area at the left side.
     ///
     /// The start address of the memory area is increased by `new_size`. The
@@ -200,6 +203,40 @@ impl<B: MappingBackend> MemoryArea<B> {
         // Use wrapping_sub to avoid overflow check, same as above.
         self.va_range.end = self.va_range.end.wrapping_sub(unmap_size);
         self.retain_pages_in_range();
+        Ok(())
+    }
+    ///WARN: 直接调用可能会导致areas重叠
+    pub (crate) unsafe fn extend_left(
+        &mut self,
+        new_size: usize,
+        page_table: &mut B::PageTable,
+    ) -> MappingResult{
+        assert!(new_size > 0 && new_size > self.size());
+        let unmap_size = new_size - self.size();
+        let map_start = self.start().wrapping_sub(unmap_size);
+        let mut new_frames = match (self.backend.map(map_start,unmap_size,self.flags,page_table)){
+            Ok(r)=>r,
+            Err(_)=>return Err(MappingError::BadState),
+        };
+        self.frames.append(&mut new_frames);
+        self.va_range.start=map_start;
+        Ok(())
+    }
+
+    pub (crate) unsafe fn extend_right(
+        &mut self,
+        new_size: usize,
+        page_table: &mut B::PageTable,
+    ) -> MappingResult{
+        assert!(new_size > 0 && new_size > self.size());
+        let unmap_size = new_size - self.size();
+        let map_start = self.start().wrapping_add(self.size());
+        let mut new_frames = match (self.backend.map(map_start,unmap_size,self.flags,page_table)){
+            Ok(r)=>r,
+            Err(_)=>return Err(MappingError::BadState),
+        };
+        self.frames.append(&mut new_frames);
+        self.va_range.end=self.va_range.end.wrapping_add(unmap_size);
         Ok(())
     }
 
