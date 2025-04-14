@@ -18,7 +18,7 @@ pub struct MemoryArea<B: MappingBackend> {
     /// so it must be aligned to PAGE_SIZE_4K.
     frames: BTreeMap<B::Addr, B::FrameTrackerRef>,
     flags: B::Flags,
-    pub (crate) backend: B,
+    pub(crate) backend: B,
 }
 
 // TODO: should decrease ref of page if mapping is changed.
@@ -83,19 +83,18 @@ impl<B: MappingBackend> MemoryArea<B> {
 
     /// Changes the end address of the memory area.
     pub(crate) fn set_end(&mut self, new_end: B::Addr) {
-        
         self.va_range.end = new_end;
         self.retain_pages_in_range();
     }
 
-    pub(crate) fn find_frame(&self, vaddr: B::Addr) -> Option<B::FrameTrackerRef> {
+    pub fn find_frame(&self, vaddr: B::Addr) -> Option<B::FrameTrackerRef> {
         debug_assert!(vaddr.is_aligned_4k());
         self.frames.get(&vaddr).cloned()
     }
 
     /// Inserts a frame into the memory area.
     /// Frame will be replaced if vaddr already in frame maps.
-    pub(crate) fn insert_frame(
+    pub fn insert_frame(
         &mut self,
         vaddr: B::Addr,
         frame: B::FrameTrackerRef,
@@ -104,8 +103,12 @@ impl<B: MappingBackend> MemoryArea<B> {
         self.frames.insert(vaddr, frame)
     }
 
+    pub fn frames_len(&self) -> usize {
+        self.frames.len()
+    }
+
     /// Maps the whole memory area in the page table.
-    pub(crate) fn map_area(&mut self, page_table: &mut B::PageTable) -> MappingResult {
+    pub fn map_area(&mut self, page_table: &mut B::PageTable) -> MappingResult {
         let frame_refs = self
             .backend
             .map(self.start(), self.size(), self.flags, page_table)
@@ -115,7 +118,7 @@ impl<B: MappingBackend> MemoryArea<B> {
     }
 
     /// Unmaps the whole memory area in the page table.
-    pub(crate) fn unmap_area(&mut self, page_table: &mut B::PageTable) -> MappingResult {
+    pub fn unmap_area(&mut self, page_table: &mut B::PageTable) -> MappingResult {
         // Backend::Unmap will not deallocate the frames if feature = "RAII".
         self.backend
             .unmap(self.start(), self.size(), page_table)
@@ -124,6 +127,26 @@ impl<B: MappingBackend> MemoryArea<B> {
         // Decrease the ref of frame trackers.
         #[cfg(feature = "RAII")]
         self.frames.clear();
+        Ok(())
+    }
+
+    pub fn unmap_frames(
+        &mut self,
+        start: B::Addr,
+        size: usize,
+        page_table: &mut B::PageTable,
+    ) -> MappingResult {
+        // Backend::Unmap will not deallocate the frames if feature = "RAII".
+        self.backend
+            .unmap(start, size, page_table)
+            .then_some(())
+            .ok_or(MappingError::BadState)?;
+        // Decrease the ref of frame trackers.
+        #[cfg(feature = "RAII")]
+        {
+            let mut tail = self.frames.split_off(&start);
+            self.frames.append(&mut tail.split_off(&(start.add(size))));
+        }
         Ok(())
     }
 
@@ -147,8 +170,6 @@ impl<B: MappingBackend> MemoryArea<B> {
         self.frames = self.frames.split_off(&self.va_range().end);
     }
 
-    
-    
     /// Shrinks the memory area at the left side.
     ///
     /// The start address of the memory area is increased by `new_size`. The
@@ -206,37 +227,43 @@ impl<B: MappingBackend> MemoryArea<B> {
         Ok(())
     }
     ///WARN: 直接调用可能会导致areas重叠
-    pub (crate) unsafe fn extend_left(
+    pub(crate) unsafe fn extend_left(
         &mut self,
         new_size: usize,
         page_table: &mut B::PageTable,
-    ) -> MappingResult{
+    ) -> MappingResult {
         assert!(new_size > 0 && new_size > self.size());
         let unmap_size = new_size - self.size();
         let map_start = self.start().wrapping_sub(unmap_size);
-        let mut new_frames = match (self.backend.map(map_start,unmap_size,self.flags,page_table)){
-            Ok(r)=>r,
-            Err(_)=>return Err(MappingError::BadState),
+        let mut new_frames = match (self
+            .backend
+            .map(map_start, unmap_size, self.flags, page_table))
+        {
+            Ok(r) => r,
+            Err(_) => return Err(MappingError::BadState),
         };
         self.frames.append(&mut new_frames);
-        self.va_range.start=map_start;
+        self.va_range.start = map_start;
         Ok(())
     }
 
-    pub (crate) unsafe fn extend_right(
+    pub(crate) unsafe fn extend_right(
         &mut self,
         new_size: usize,
         page_table: &mut B::PageTable,
-    ) -> MappingResult{
+    ) -> MappingResult {
         assert!(new_size > 0 && new_size > self.size());
         let unmap_size = new_size - self.size();
         let map_start = self.start().wrapping_add(self.size());
-        let mut new_frames = match (self.backend.map(map_start,unmap_size,self.flags,page_table)){
-            Ok(r)=>r,
-            Err(_)=>return Err(MappingError::BadState),
+        let mut new_frames = match (self
+            .backend
+            .map(map_start, unmap_size, self.flags, page_table))
+        {
+            Ok(r) => r,
+            Err(_) => return Err(MappingError::BadState),
         };
         self.frames.append(&mut new_frames);
-        self.va_range.end=self.va_range.end.wrapping_add(unmap_size);
+        self.va_range.end = self.va_range.end.wrapping_add(unmap_size);
         Ok(())
     }
 
@@ -247,7 +274,7 @@ impl<B: MappingBackend> MemoryArea<B> {
     ///
     /// Returns `None` if the given position is not in the memory area, or one
     /// of the parts is empty after splitting.
-    pub(crate) fn split(&mut self, pos: B::Addr) -> Option<Self> {
+    pub fn split(&mut self, pos: B::Addr) -> Option<Self> {
         if self.start() < pos && pos < self.end() {
             let new_area = Self::new(
                 pos,
@@ -264,6 +291,24 @@ impl<B: MappingBackend> MemoryArea<B> {
             Some(new_area)
         } else {
             None
+        }
+    }
+}
+
+#[cfg(feature = "mmap")]
+impl<B: MappingBackend> MemoryArea<B> {
+    pub fn new_mmap(
+        start: B::Addr,
+        size: usize,
+        frame_alloced: Option<BTreeMap<B::Addr, B::FrameTrackerRef>>,
+        flags: B::Flags,
+        backend: B,
+    ) -> Self {
+        Self {
+            va_range: AddrRange::from_start_size(start, size),
+            frames: frame_alloced.unwrap_or(BTreeMap::new()),
+            flags,
+            backend,
         }
     }
 }

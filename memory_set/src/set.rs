@@ -11,8 +11,6 @@ pub struct MemorySet<B: MappingBackend> {
     areas: BTreeMap<B::Addr, MemoryArea<B>>,
 }
 
-
-
 impl<B: MappingBackend> MemorySet<B> {
     /// Creates a new memory set.
     pub const fn new() -> Self {
@@ -100,11 +98,14 @@ impl<B: MappingBackend> MemorySet<B> {
 
     /// insert an existing memory area into the set.
 
-    /// TODO: using a diffent type of area: no need to unmap the frames. The
-    /// "ghost" one.
+    /// Add a new memory area without mapping.
+    /// Useful for lazy.
     pub fn insert(&mut self, area: MemoryArea<B>) -> MappingResult {
         self.areas.insert(area.start(), area);
         Ok(())
+    }
+    pub fn delete(&mut self, vaddr: B::Addr) {
+        self.areas.remove(&vaddr);
     }
     /// Add a new memory mapping.
     ///
@@ -199,14 +200,11 @@ impl<B: MappingBackend> MemorySet<B> {
         Ok(())
     }
 
-
-
-
     pub fn adjust_area(
         &mut self,
         area_addr: B::Addr,
-        start:  B::Addr,
-        end:  B::Addr,
+        start: B::Addr,
+        end: B::Addr,
         page_table: &mut B::PageTable,
     ) -> Result<(), MappingError> {
         let area = self.areas.get_mut(&area_addr).unwrap();
@@ -224,7 +222,6 @@ impl<B: MappingBackend> MemorySet<B> {
 
         // 处理左边界的变化
         if start != current_start {
-            
             if start < current_start {
                 // 需要向左扩展
                 // 新的总size = (current_end - start)
@@ -260,8 +257,6 @@ impl<B: MappingBackend> MemorySet<B> {
         Ok(())
     }
 
-
-
     pub fn find_frame(&self, vaddr: B::Addr) -> Option<B::FrameTrackerRef> {
         if let Some(area) = self.find(vaddr) {
             return area.find_frame(vaddr);
@@ -269,12 +264,22 @@ impl<B: MappingBackend> MemorySet<B> {
         None
     }
 
+    pub fn insert_frame(
+        &mut self,
+        vaddr: B::Addr,
+        frame: B::FrameTrackerRef,
+    ) -> Option<B::FrameTrackerRef> {
+        if let Some(area) = self.find_mut(vaddr) {
+            return area.insert_frame(vaddr, frame);
+        }
+        None
+    }
+
     /// Remap a vaddr to a new frame.pub fn remap_frame(&mut self, vaddr:
     /// B::Addr, new_frame: B::FrameTrackerImpl) {
     pub fn remap_frame(&mut self, vaddr: B::Addr, new_frame: B::FrameTrackerRef) {
-        if let Some(area) = self.find_mut(vaddr) {
-            area.insert_frame(vaddr, new_frame).expect("Frame not exist");
-        }
+        self.insert_frame(vaddr, new_frame)
+            .expect("Frame not exist");
     }
 
     /// Remove all memory areas and the underlying mappings.
