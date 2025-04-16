@@ -1,5 +1,4 @@
 use core::ops::Deref;
-use alloc::sync::Arc;
 use alloc::collections::BTreeMap;
 
 use memory_addr::{FrameTracker, MemoryAddr};

@@ -1,8 +1,8 @@
 use alloc::collections::BTreeMap;
 #[allow(unused_imports)] // this is a weird false alarm
 use alloc::vec::Vec;
-use core::{error, fmt};
-use memory_addr::{AddrRange, MemoryAddr, VirtAddr};
+use core::{fmt};
+use memory_addr::{AddrRange, MemoryAddr};
 
 use crate::{MappingBackend, MappingError, MappingResult, MemoryArea};
 
