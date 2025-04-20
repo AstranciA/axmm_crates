@@ -1,8 +1,8 @@
 use alloc::collections::BTreeMap;
 #[allow(unused_imports)] // this is a weird false alarm
 use alloc::vec::Vec;
-use core::{error, fmt};
-use memory_addr::{AddrRange, MemoryAddr, VirtAddr};
+use core::fmt;
+use memory_addr::{AddrRange, MemoryAddr};
 
 use crate::{MappingBackend, MappingError, MappingResult, MemoryArea};
 
@@ -231,9 +231,8 @@ impl<B: MappingBackend> MemorySet<B> {
             } else {
                 // 需要向右收缩
                 // 新的总size = (current_end - start)
-                unsafe {
-                    area.shrink_left(current_end.sub_addr(start), page_table)?;
-                }
+
+                area.shrink_left(current_end.sub_addr(start), page_table)?;
             }
         }
 
@@ -248,9 +247,7 @@ impl<B: MappingBackend> MemorySet<B> {
             } else {
                 // 需要向左收缩
                 // 新的总size = (end - current_start)
-                unsafe {
-                    area.shrink_right(end.sub_addr(current_start), page_table)?;
-                }
+                area.shrink_right(end.sub_addr(current_start), page_table)?;
             }
         }
 

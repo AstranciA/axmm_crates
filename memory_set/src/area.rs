@@ -3,7 +3,7 @@ use core::fmt;
 use memory_addr::{AddrRange, MemoryAddr};
 
 use crate::{MappingBackend, MappingError, MappingResult};
-use alloc::{collections::BTreeMap, sync::Arc};
+use alloc::collections::BTreeMap;
 
 /// A memory area represents a continuous range of virtual memory with the same
 /// flags.
@@ -75,6 +75,7 @@ impl<B: MappingBackend> MemoryArea<B> {
     }
 }
 
+#[allow(unused)]
 impl<B: MappingBackend> MemoryArea<B> {
     /// Changes the flags.
     pub(crate) fn set_flags(&mut self, new_flags: B::Flags) {
@@ -235,9 +236,9 @@ impl<B: MappingBackend> MemoryArea<B> {
         assert!(new_size > 0 && new_size > self.size());
         let unmap_size = new_size - self.size();
         let map_start = self.start().wrapping_sub(unmap_size);
-        let mut new_frames = match (self
+        let mut new_frames = match self
             .backend
-            .map(map_start, unmap_size, self.flags, page_table))
+            .map(map_start, unmap_size, self.flags, page_table)
         {
             Ok(r) => r,
             Err(_) => return Err(MappingError::BadState),
