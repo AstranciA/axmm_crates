@@ -44,6 +44,12 @@ impl<B: MappingBackend> MemoryArea<B> {
         }
     }
 
+    pub fn clone_(&self, flags: B::Flags) -> Self {
+        let mut area = self.clone();
+        area.set_flags(flags);
+        area
+    }
+
     /// Returns the virtual address range.
     pub const fn va_range(&self) -> AddrRange<B::Addr> {
         self.va_range
