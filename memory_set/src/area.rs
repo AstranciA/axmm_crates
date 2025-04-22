@@ -262,9 +262,9 @@ impl<B: MappingBackend> MemoryArea<B> {
         assert!(new_size > 0 && new_size > self.size());
         let unmap_size = new_size - self.size();
         let map_start = self.start().wrapping_add(self.size());
-        let mut new_frames = match (self
+        let mut new_frames = match self
             .backend
-            .map(map_start, unmap_size, self.flags, page_table))
+            .map(map_start, unmap_size, self.flags, page_table)
         {
             Ok(r) => r,
             Err(_) => return Err(MappingError::BadState),
