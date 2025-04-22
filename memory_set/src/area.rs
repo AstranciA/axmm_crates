@@ -3,7 +3,7 @@ use core::fmt;
 use memory_addr::{AddrRange, MemoryAddr};
 
 use crate::{MappingBackend, MappingError, MappingResult};
-use alloc::{collections::BTreeMap};
+use alloc::collections::BTreeMap;
 
 /// A memory area represents a continuous range of virtual memory with the same
 /// flags.
@@ -44,6 +44,12 @@ impl<B: MappingBackend> MemoryArea<B> {
         }
     }
 
+    pub fn clone_(&self, flags: B::Flags) -> Self {
+        let mut area = self.clone();
+        area.set_flags(flags);
+        area
+    }
+
     /// Returns the virtual address range.
     pub const fn va_range(&self) -> AddrRange<B::Addr> {
         self.va_range
@@ -75,6 +81,7 @@ impl<B: MappingBackend> MemoryArea<B> {
     }
 }
 
+#[allow(unused)]
 impl<B: MappingBackend> MemoryArea<B> {
     /// Changes the flags.
     pub(crate) fn set_flags(&mut self, new_flags: B::Flags) {

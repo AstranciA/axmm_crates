@@ -9,7 +9,7 @@ mod range;
 extern crate alloc;
 pub use self::addr::{MemoryAddr, PhysAddr, VirtAddr};
 pub use self::iter::PageIter;
-pub use self::page::{Page, FrameTracker};
+pub use self::page::{FrameTracker, Page};
 pub use self::range::{AddrRange, PhysAddrRange, VirtAddrRange};
 
 /// The size of a 4K page (4096 bytes).

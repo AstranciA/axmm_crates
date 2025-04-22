@@ -1,7 +1,7 @@
 use alloc::collections::BTreeMap;
 #[allow(unused_imports)] // this is a weird false alarm
 use alloc::vec::Vec;
-use core::{fmt};
+use core::fmt;
 use memory_addr::{AddrRange, MemoryAddr};
 
 use crate::{MappingBackend, MappingError, MappingResult, MemoryArea};
@@ -207,7 +207,7 @@ impl<B: MappingBackend> MemorySet<B> {
         end: B::Addr,
         page_table: &mut B::PageTable,
     ) -> Result<(), MappingError> {
-        let area = self.areas.get(&area_addr).unwrap();
+        let area = self.areas.get_mut(&area_addr).unwrap();
         assert!(start.is_aligned_4k());
         assert!(end.is_aligned_4k());
 
@@ -225,22 +225,14 @@ impl<B: MappingBackend> MemorySet<B> {
             if start < current_start {
                 // 需要向左扩展
                 // 新的总size = (current_end - start)
-                if !self.overlaps(AddrRange::<B::Addr>::new(start, current_start))
-                {
-                    let area = self.areas.get_mut(&area_addr).unwrap();
-                    unsafe {
-                        area.extend_left(current_end.sub_addr(start), page_table)?;
-                    }
-                }else {
-                    return Err(MappingError::InvalidParam);
+                unsafe {
+                    area.extend_left(current_end.sub_addr(start), page_table)?;
                 }
             } else {
                 // 需要向右收缩
                 // 新的总size = (current_end - start)
-                let area = self.areas.get_mut(&area_addr).unwrap();
-                unsafe {
-                    area.shrink_left(current_end.sub_addr(start), page_table)?;
-                }
+
+                area.shrink_left(current_end.sub_addr(start), page_table)?;
             }
         }
 
@@ -249,22 +241,13 @@ impl<B: MappingBackend> MemorySet<B> {
             if end > current_end {
                 // 需要向右扩展
                 // 新的总size = (end - current_start)
-                if !self.overlaps(AddrRange::<B::Addr>::new(current_end, end))
-                {
-                    let area = self.areas.get_mut(&area_addr).unwrap();
-                    unsafe {
-                        area.extend_right(end.sub_addr(current_start), page_table)?;
-                    }
-                }else {
-                    return Err(MappingError::InvalidParam);
+                unsafe {
+                    area.extend_right(end.sub_addr(current_start), page_table)?;
                 }
             } else {
                 // 需要向左收缩
                 // 新的总size = (end - current_start)
-                let area = self.areas.get_mut(&area_addr).unwrap();
-                unsafe {
-                    area.shrink_right(end.sub_addr(current_start), page_table)?;
-                }
+                area.shrink_right(end.sub_addr(current_start), page_table)?;
             }
         }
 
