@@ -1,7 +1,7 @@
 use alloc::collections::BTreeMap;
 use core::ops::Deref;
 
-use memory_addr::{FrameTracker, MemoryAddr};
+use memory_addr::MemoryAddr;
 
 /// Underlying operations to do when manipulating mappings within the specific
 /// [`MemoryArea`](crate::MemoryArea).
@@ -19,7 +19,7 @@ pub trait MappingBackend: Clone {
     type PageTable;
 
     #[cfg(feature = "RAII")]
-    type FrameTrackerImpl: FrameTracker;
+    type FrameTrackerImpl: memory_addr::FrameTracker;
     #[cfg(feature = "RAII")]
     type FrameTrackerRef: Deref<Target = Self::FrameTrackerImpl> + Clone;
 
@@ -41,7 +41,7 @@ pub trait MappingBackend: Clone {
         size: usize,
         flags: Self::Flags,
         page_table: &mut Self::PageTable,
-    ) -> bool;
+    ) -> Result<(), ()>;
 
     /// What to do when unmaping a memory region within the area.
     /// Should not deallocate frames if RAII is on.

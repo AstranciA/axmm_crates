@@ -254,31 +254,6 @@ impl<B: MappingBackend> MemorySet<B> {
         Ok(())
     }
 
-    pub fn find_frame(&self, vaddr: B::Addr) -> Option<B::FrameTrackerRef> {
-        if let Some(area) = self.find(vaddr) {
-            return area.find_frame(vaddr);
-        }
-        None
-    }
-
-    pub fn insert_frame(
-        &mut self,
-        vaddr: B::Addr,
-        frame: B::FrameTrackerRef,
-    ) -> Option<B::FrameTrackerRef> {
-        if let Some(area) = self.find_mut(vaddr) {
-            return area.insert_frame(vaddr, frame);
-        }
-        None
-    }
-
-    /// Remap a vaddr to a new frame.pub fn remap_frame(&mut self, vaddr:
-    /// B::Addr, new_frame: B::FrameTrackerImpl) {
-    pub fn remap_frame(&mut self, vaddr: B::Addr, new_frame: B::FrameTrackerRef) {
-        self.insert_frame(vaddr, new_frame)
-            .expect("Frame not exist");
-    }
-
     /// Remove all memory areas and the underlying mappings.
     pub fn clear(&mut self, page_table: &mut B::PageTable) -> MappingResult {
         for (_, area) in self.areas.iter_mut() {
@@ -355,6 +330,34 @@ impl<B: MappingBackend> MemorySet<B> {
         }
         self.areas.extend(to_insert);
         Ok(())
+    }
+}
+
+#[cfg(feature = "RAII")]
+impl<B: MappingBackend> MemorySet<B> {
+    pub fn find_frame(&self, vaddr: B::Addr) -> Option<B::FrameTrackerRef> {
+        if let Some(area) = self.find(vaddr) {
+            return area.find_frame(vaddr);
+        }
+        None
+    }
+
+    pub fn insert_frame(
+        &mut self,
+        vaddr: B::Addr,
+        frame: B::FrameTrackerRef,
+    ) -> Option<B::FrameTrackerRef> {
+        if let Some(area) = self.find_mut(vaddr) {
+            return area.insert_frame(vaddr, frame);
+        }
+        None
+    }
+
+    /// Remap a vaddr to a new frame.pub fn remap_frame(&mut self, vaddr:
+    /// B::Addr, new_frame: B::FrameTrackerImpl) {
+    pub fn remap_frame(&mut self, vaddr: B::Addr, new_frame: B::FrameTrackerRef) {
+        self.insert_frame(vaddr, new_frame)
+            .expect("Frame not exist");
     }
 }
 
