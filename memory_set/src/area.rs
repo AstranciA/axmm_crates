@@ -16,6 +16,7 @@ pub struct MemoryArea<B: MappingBackend> {
     /// Hold pages with RAII.
     /// The key is the vpn of the page,
     /// so it must be aligned to PAGE_SIZE_4K.
+    #[cfg(feature = "RAII")]
     frames: BTreeMap<B::Addr, B::FrameTrackerRef>,
     flags: B::Flags,
     pub(crate) backend: B,
@@ -32,12 +33,13 @@ impl<B: MappingBackend> MemoryArea<B> {
     pub fn new(
         start: B::Addr,
         size: usize,
-        frame_alloced: Option<BTreeMap<B::Addr, B::FrameTrackerRef>>,
+        #[cfg(feature = "RAII")] frame_alloced: Option<BTreeMap<B::Addr, B::FrameTrackerRef>>,
         flags: B::Flags,
         backend: B,
     ) -> Self {
         Self {
             va_range: AddrRange::from_start_size(start, size),
+            #[cfg(feature = "RAII")]
             frames: frame_alloced.unwrap_or(BTreeMap::new()),
             flags,
             backend,
@@ -91,27 +93,8 @@ impl<B: MappingBackend> MemoryArea<B> {
     /// Changes the end address of the memory area.
     pub(crate) fn set_end(&mut self, new_end: B::Addr) {
         self.va_range.end = new_end;
-        self.retain_pages_in_range();
-    }
-
-    pub fn find_frame(&self, vaddr: B::Addr) -> Option<B::FrameTrackerRef> {
-        debug_assert!(vaddr.is_aligned_4k());
-        self.frames.get(&vaddr).cloned()
-    }
-
-    /// Inserts a frame into the memory area.
-    /// Frame will be replaced if vaddr already in frame maps.
-    pub fn insert_frame(
-        &mut self,
-        vaddr: B::Addr,
-        frame: B::FrameTrackerRef,
-    ) -> Option<<B as MappingBackend>::FrameTrackerRef> {
-        debug_assert!(vaddr.is_aligned_4k());
-        self.frames.insert(vaddr, frame)
-    }
-
-    pub fn frames_len(&self) -> usize {
-        self.frames.len()
+        #[cfg(feature = "RAII")]
+        self.retain_frames_in_range();
     }
 
     /// Maps the whole memory area in the page table.
@@ -120,6 +103,7 @@ impl<B: MappingBackend> MemoryArea<B> {
             .backend
             .map(self.start(), self.size(), self.flags, page_table)
             .or(Err(MappingError::BadState))?;
+        #[cfg(feature = "RAII")]
         self.frames.extend(frame_refs);
         Ok(())
     }
@@ -168,15 +152,6 @@ impl<B: MappingBackend> MemoryArea<B> {
         Ok(())
     }
 
-    /// Retains only the pages in [self.va_range].
-    /// called manually when the va_range is changed.
-    fn retain_pages_in_range(&mut self) {
-        // 移除大于等于 end 的部分
-        self.frames.split_off(&self.va_range().end);
-        // 移除小于 start 的部分
-        self.frames = self.frames.split_off(&self.va_range().end);
-    }
-
     /// Shrinks the memory area at the left side.
     ///
     /// The start address of the memory area is increased by `new_size`. The
@@ -200,7 +175,8 @@ impl<B: MappingBackend> MemoryArea<B> {
         // Safety: `unmap_size` is less than the current size, so it will never
         // overflow.
         self.va_range.start = self.va_range.start.wrapping_add(unmap_size);
-        self.retain_pages_in_range();
+        #[cfg(feature = "RAII")]
+        self.retain_frames_in_range();
 
         Ok(())
     }
@@ -230,7 +206,8 @@ impl<B: MappingBackend> MemoryArea<B> {
 
         // Use wrapping_sub to avoid overflow check, same as above.
         self.va_range.end = self.va_range.end.wrapping_sub(unmap_size);
-        self.retain_pages_in_range();
+        #[cfg(feature = "RAII")]
+        self.retain_frames_in_range();
         Ok(())
     }
     ///WARN: 直接调用可能会导致areas重叠
@@ -242,14 +219,22 @@ impl<B: MappingBackend> MemoryArea<B> {
         assert!(new_size > 0 && new_size > self.size());
         let unmap_size = new_size - self.size();
         let map_start = self.start().wrapping_sub(unmap_size);
-        let mut new_frames = match self
+        let map_result = self
             .backend
-            .map(map_start, unmap_size, self.flags, page_table)
+            .map(map_start, unmap_size, self.flags, page_table);
+
+        #[cfg(feature = "RAII")]
         {
-            Ok(r) => r,
-            Err(_) => return Err(MappingError::BadState),
-        };
-        self.frames.append(&mut new_frames);
+            let mut new_frames = match map_result {
+                Ok(r) => r,
+                Err(_) => return Err(MappingError::BadState),
+            };
+            self.frames.append(&mut new_frames);
+        }
+        #[cfg(not(feature = "RAII"))]
+        if map_result.is_err() {
+            return Err(MappingError::BadState);
+        }
         self.va_range.start = map_start;
         Ok(())
     }
@@ -262,14 +247,22 @@ impl<B: MappingBackend> MemoryArea<B> {
         assert!(new_size > 0 && new_size > self.size());
         let unmap_size = new_size - self.size();
         let map_start = self.start().wrapping_add(self.size());
-        let mut new_frames = match self
+        let map_result = self
             .backend
-            .map(map_start, unmap_size, self.flags, page_table)
+            .map(map_start, unmap_size, self.flags, page_table);
+
+        #[cfg(feature = "RAII")]
         {
-            Ok(r) => r,
-            Err(_) => return Err(MappingError::BadState),
-        };
-        self.frames.append(&mut new_frames);
+            let mut new_frames = match map_result {
+                Ok(r) => r,
+                Err(_) => return Err(MappingError::BadState),
+            };
+            self.frames.append(&mut new_frames);
+        }
+        #[cfg(not(feature = "RAII"))]
+        if map_result.is_err() {
+            return Err(MappingError::BadState);
+        }
         self.va_range.end = self.va_range.end.wrapping_add(unmap_size);
         Ok(())
     }
@@ -288,6 +281,7 @@ impl<B: MappingBackend> MemoryArea<B> {
                 // Use wrapping_sub_addr to avoid overflow check. It is safe because
                 // `pos` is within the memory area.
                 self.end().wrapping_sub_addr(pos),
+                #[cfg(feature = "RAII")]
                 Some(self.frames.split_off(&pos)), // pages retained here
                 self.flags,
                 self.backend.clone(),
@@ -299,6 +293,37 @@ impl<B: MappingBackend> MemoryArea<B> {
         } else {
             None
         }
+    }
+}
+#[cfg(feature = "RAII")]
+impl<B: MappingBackend> MemoryArea<B> {
+    /// Inserts a frame into the memory area.
+    /// Frame will be replaced if vaddr already in frame maps.
+    pub fn insert_frame(
+        &mut self,
+        vaddr: B::Addr,
+        frame: B::FrameTrackerRef,
+    ) -> Option<<B as MappingBackend>::FrameTrackerRef> {
+        debug_assert!(vaddr.is_aligned_4k());
+        self.frames.insert(vaddr, frame)
+    }
+
+    pub fn find_frame(&self, vaddr: B::Addr) -> Option<B::FrameTrackerRef> {
+        debug_assert!(vaddr.is_aligned_4k());
+        self.frames.get(&vaddr).cloned()
+    }
+
+    pub fn frames_len(&self) -> usize {
+        self.frames.len()
+    }
+
+    /// Retains only the pages in [self.va_range].
+    /// called manually when the va_range is changed.
+    fn retain_frames_in_range(&mut self) {
+        // 移除大于等于 end 的部分
+        self.frames.split_off(&self.va_range().end);
+        // 移除小于 start 的部分
+        self.frames = self.frames.split_off(&self.va_range().end);
     }
 }
 

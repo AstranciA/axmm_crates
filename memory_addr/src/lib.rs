@@ -3,12 +3,14 @@
 
 mod addr;
 mod iter;
+#[cfg(feature = "RAII")]
 mod page;
 mod range;
 
 extern crate alloc;
 pub use self::addr::{MemoryAddr, PhysAddr, VirtAddr};
 pub use self::iter::PageIter;
+#[cfg(feature = "RAII")]
 pub use self::page::{FrameTracker, Page};
 pub use self::range::{AddrRange, PhysAddrRange, VirtAddrRange};
 
