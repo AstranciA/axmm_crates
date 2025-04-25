@@ -91,6 +91,7 @@ fn test_map_unmap() {
             MemoryArea::new(start.into(), 0x1000, 1, MockBackend),
             &mut pt,
             false,
+            None
         ));
     }
     // Map [0x1000, 0x2000), [0x3000, 0x4000), [0x5000, 0x6000), ...
@@ -99,6 +100,7 @@ fn test_map_unmap() {
             MemoryArea::new(start.into(), 0x1000, 2, MockBackend),
             &mut pt,
             false,
+            None
         ));
     }
     dump_memory_set(&set);
@@ -119,7 +121,8 @@ fn test_map_unmap() {
         set.map(
             MemoryArea::new(0x4000.into(), 0x4000, 3, MockBackend),
             &mut pt,
-            false
+            false,
+            None
         ),
         AlreadyExists
     );
@@ -127,7 +130,8 @@ fn test_map_unmap() {
     assert_ok!(set.map(
         MemoryArea::new(0x4000.into(), 0x4000, 3, MockBackend),
         &mut pt,
-        true
+        true,
+        None
     ));
     dump_memory_set(&set);
     assert_eq!(set.len(), 13);
@@ -163,6 +167,7 @@ fn test_unmap_split() {
             MemoryArea::new(start.into(), 0x1000, 1, MockBackend),
             &mut pt,
             false,
+            None
         ));
     }
     assert_eq!(set.len(), 8);
@@ -249,6 +254,7 @@ fn test_protect() {
             MemoryArea::new(start.into(), 0x1000, 0x7, MockBackend),
             &mut pt,
             false,
+            None
         ));
     }
     assert_eq!(set.len(), 8);
@@ -338,6 +344,7 @@ fn test_find_free_area() {
             MemoryArea::new(start.into(), 0x1000, 1, MockBackend),
             &mut pt,
             false,
+            None
         ));
     }
 

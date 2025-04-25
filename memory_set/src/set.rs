@@ -120,6 +120,7 @@ impl<B: MappingBackend> MemorySet<B> {
         mut area: MemoryArea<B>,
         page_table: &mut B::PageTable,
         unmap_overlap: bool,
+        flags:Option<B::Flags>,
     ) -> MappingResult {
         if area.va_range().is_empty() {
             return Err(MappingError::InvalidParam);
@@ -133,7 +134,7 @@ impl<B: MappingBackend> MemorySet<B> {
             }
         }
 
-        area.map_area(page_table)?;
+        area.map_area(page_table,flags)?;
         assert!(self.areas.insert(area.start(), area).is_none());
         Ok(())
     }
