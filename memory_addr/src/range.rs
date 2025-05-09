@@ -300,6 +300,11 @@ where
     pub fn overlaps(self, other: Self) -> bool {
         self.start < other.end && other.start < self.end
     }
+
+    #[inline]
+    pub fn to_range(self) -> core::ops::Range<usize> {
+        self.start.into()..self.end.into()
+    }
 }
 
 /// Conversion from [`Range`] to [`AddrRange`], provided that the type of the
