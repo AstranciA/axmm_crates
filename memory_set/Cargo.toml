@@ -18,4 +18,4 @@ RAII = ["memory_addr/RAII"]
 mmap = []
 
 [dependencies]
-memory_addr = { path = "../memory_addr", version = "0.3" }
+memory_addr = { path = "../memory_addr", version = "0.3.2" }

@@ -98,10 +98,11 @@ impl<B: MappingBackend> MemoryArea<B> {
     }
 
     /// Maps the whole memory area in the page table.
-    pub fn map_area(&mut self, page_table: &mut B::PageTable) -> MappingResult {
+    pub fn map_area(&mut self, page_table: &mut B::PageTable,flags:Option<B::Flags>) -> MappingResult {
+        let flag = flags.unwrap_or(self.flags);
         let frame_refs = self
             .backend
-            .map(self.start(), self.size(), self.flags, page_table)
+            .map(self.start(), self.size(), flag, page_table)
             .or(Err(MappingError::BadState))?;
         #[cfg(feature = "RAII")]
         self.frames.extend(frame_refs);
