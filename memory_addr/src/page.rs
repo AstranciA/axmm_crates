@@ -13,6 +13,9 @@ pub trait FrameTracker {
     /// new FrameTracker without alloc
     fn new(pa: PhysAddr) -> Self;
 
+    /// new FrameTracker without alloc and dealloc
+    fn no_tracking(pa: PhysAddr) -> Self;
+
     /// new FrameTracker with alloc
     fn alloc_frame() -> Self;
 
