@@ -100,8 +100,19 @@ impl<B: MappingBackend> MemorySet<B> {
 
     /// Add a new memory area without mapping.
     /// Useful for lazy.
-    pub fn insert(&mut self, area: MemoryArea<B>) -> MappingResult {
-        self.areas.insert(area.start(), area);
+    pub fn insert(&mut self, area: MemoryArea<B>, unmap_overlap: bool) -> MappingResult {
+        if area.va_range().is_empty() {
+            return Err(MappingError::InvalidParam);
+        }
+
+        if area.va_range().is_empty() {
+            return Err(MappingError::InvalidParam);
+        }
+
+        if self.overlaps(area.va_range()) && !unmap_overlap {
+            return Err(MappingError::AlreadyExists);
+        }
+        assert!(self.areas.insert(area.start(), area).is_none());
         Ok(())
     }
     pub fn delete(&mut self, vaddr: B::Addr) {
