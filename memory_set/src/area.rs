@@ -222,11 +222,11 @@ impl<B: MappingBackend> MemoryArea<B> {
         page_table: &mut B::PageTable,
     ) -> MappingResult {
         assert!(new_size > 0 && new_size > self.size());
-        let unmap_size = new_size - self.size();
-        let map_start = self.start().wrapping_sub(unmap_size);
+        let map_size = new_size - self.size();
+        let map_start = self.start().wrapping_sub(map_size);
         let map_result = self
             .backend
-            .map(map_start, unmap_size, self.flags, page_table);
+            .map(map_start, map_size, self.flags, page_table);
 
         #[cfg(feature = "RAII")]
         {
@@ -250,11 +250,11 @@ impl<B: MappingBackend> MemoryArea<B> {
         page_table: &mut B::PageTable,
     ) -> MappingResult {
         assert!(new_size > 0 && new_size > self.size());
-        let unmap_size = new_size - self.size();
+        let map_size = new_size - self.size();
         let map_start = self.start().wrapping_add(self.size());
         let map_result = self
             .backend
-            .map(map_start, unmap_size, self.flags, page_table);
+            .map(map_start, map_size, self.flags, page_table);
 
         #[cfg(feature = "RAII")]
         {
@@ -268,7 +268,7 @@ impl<B: MappingBackend> MemoryArea<B> {
         if map_result.is_err() {
             return Err(MappingError::BadState);
         }
-        self.va_range.end = self.va_range.end.wrapping_add(unmap_size);
+        self.va_range.end = self.va_range.end.wrapping_add(map_size);
         Ok(())
     }
 
@@ -325,10 +325,8 @@ impl<B: MappingBackend> MemoryArea<B> {
     /// Retains only the pages in [self.va_range].
     /// called manually when the va_range is changed.
     fn retain_frames_in_range(&mut self) {
-        // 移除大于等于 end 的部分
-        self.frames.split_off(&self.va_range().end);
-        // 移除小于 start 的部分
-        self.frames = self.frames.split_off(&self.va_range().end);
+        let range = self.va_range();
+        self.frames.retain(|&frame, _| range.contains(frame));
     }
 }
 
