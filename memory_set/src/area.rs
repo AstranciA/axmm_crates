@@ -1,9 +1,18 @@
 use core::fmt;
 
-use memory_addr::{AddrRange, MemoryAddr};
+use memory_addr::{AddrRange, MemoryAddr, PAGE_SIZE_4K};
 
 use crate::{MappingBackend, MappingError, MappingResult};
 use alloc::collections::BTreeMap;
+
+
+pub struct AreaStat {
+    pub start: usize,
+    pub end: usize,
+    pub size: usize,
+    pub rss: usize,
+    pub swap: usize,
+}
 
 /// A memory area represents a continuous range of virtual memory with the same
 /// flags.
@@ -80,6 +89,16 @@ impl<B: MappingBackend> MemoryArea<B> {
     /// Returns the mapping backend of the memory area.
     pub const fn backend(&self) -> &B {
         &self.backend
+    }
+
+    pub fn stat(&self) -> AreaStat {
+        AreaStat {
+            start: self.start().into(),
+            end: self.end().into(),
+            size: self.size(),
+            rss: self.frames_count() * PAGE_SIZE_4K, // TODO: large page
+            swap: 0
+        }
     }
 }
 
@@ -318,7 +337,7 @@ impl<B: MappingBackend> MemoryArea<B> {
         self.frames.get(&vaddr).cloned()
     }
 
-    pub fn frames_len(&self) -> usize {
+    pub fn frames_count(&self) -> usize {
         self.frames.len()
     }
 

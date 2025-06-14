@@ -1,4 +1,5 @@
 use alloc::collections::BTreeMap;
+use alloc::string::ToString;
 use core::ops::Deref;
 
 use memory_addr::MemoryAddr;
@@ -14,7 +15,7 @@ pub trait MappingBackend: Clone {
     /// The address type used in the memory area.
     type Addr: MemoryAddr;
     /// The flags type used in the memory area.
-    type Flags: Copy;
+    type Flags: Copy + ToString;
     /// The page table type used in the memory area.
     type PageTable;
 
