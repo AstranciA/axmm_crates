@@ -360,7 +360,7 @@ impl<B: MappingBackend> MemorySet<B> {
         frame: B::FrameTrackerRef,
     ) -> Option<B::FrameTrackerRef> {
         if let Some(area) = self.find_mut(vaddr) {
-            return area.insert_frame(vaddr, frame);
+            return area.insert_frame(vaddr.align_down_4k(), frame);
         }
         None
     }

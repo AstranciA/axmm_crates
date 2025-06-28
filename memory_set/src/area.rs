@@ -26,7 +26,7 @@ pub struct MemoryArea<B: MappingBackend> {
     /// The key is the vpn of the page,
     /// so it must be aligned to PAGE_SIZE_4K.
     #[cfg(feature = "RAII")]
-    frames: BTreeMap<B::Addr, B::FrameTrackerRef>,
+    pub frames: BTreeMap<B::Addr, B::FrameTrackerRef>,
     flags: B::Flags,
     pub(crate) backend: B,
 }
