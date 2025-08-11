@@ -17,6 +17,7 @@ pub trait MemoryAddr:
     + Into<usize>
     // The address type should be comparable.
     + Ord
+    + core::fmt::Debug
 {
     // No required methods for now. Following are some utility methods.
 
@@ -260,7 +261,7 @@ pub trait MemoryAddr:
 
 /// Implement the `MemoryAddr` trait for any type that is `Copy`, `From<usize>`,
 /// `Into<usize>`, and `Ord`.
-impl<T> MemoryAddr for T where T: Copy + From<usize> + Into<usize> + Ord {}
+impl<T> MemoryAddr for T where T: Copy + From<usize> + Into<usize> + Ord + core::fmt::Debug {}
 
 /// Creates a new address type by wrapping an `usize`.
 ///

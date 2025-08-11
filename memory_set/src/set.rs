@@ -34,6 +34,11 @@ impl<B: MappingBackend> MemorySet<B> {
         self.areas.values()
     }
 
+    /// Returns the iterator over all memory areas.
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut MemoryArea<B>> {
+        self.areas.values_mut()
+    }
+
     /// Returns whether the given address range overlaps with any existing area.
     pub fn overlaps(&self, range: AddrRange<B::Addr>) -> bool {
         if let Some((_, before)) = self.areas.range(..range.start).last() {
@@ -51,8 +56,12 @@ impl<B: MappingBackend> MemorySet<B> {
 
     /// Finds the memory area that contains the given address.
     pub fn find(&self, addr: B::Addr) -> Option<&MemoryArea<B>> {
-        let candidate = self.areas.range(..=addr).last().map(|(_, a)| a);
-        candidate.filter(|a| a.va_range().contains(addr))
+        self.areas
+            .range(..=addr)
+            .rev()
+            .take_while(|candidate| *candidate.0 <= addr)
+            .find(|(_, candidate)| candidate.va_range().contains(addr))
+            .map(|(_, area)| area)
     }
 
     /// Finds the memory area that contains the given address.
@@ -222,6 +231,7 @@ impl<B: MappingBackend> MemorySet<B> {
         let area = self.areas.get_mut(&area_addr).unwrap();
         assert!(start.is_aligned_4k());
         assert!(end.is_aligned_4k());
+        let old_range = area.va_range();
 
         // 检查新的范围是否有效
         if start >= end {
@@ -229,8 +239,8 @@ impl<B: MappingBackend> MemorySet<B> {
         }
 
         // 当前区域的边界
-        let current_start = area.start();
-        let current_end = area.end();
+        let current_start = old_range.start;
+        let current_end = old_range.end;
 
         // 处理左边界的变化
         if start != current_start {
@@ -263,6 +273,9 @@ impl<B: MappingBackend> MemorySet<B> {
             }
         }
 
+        log::debug!("Adjust area range: {old_range:?} -> {:?}", area.va_range());
+
+        let area = self.areas.get_mut(&area_addr).unwrap();
         Ok(())
     }
 
