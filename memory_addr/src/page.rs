@@ -26,7 +26,7 @@ pub trait FrameTracker {
 
     /// 获取页大小
     /// size is a const generic parameter
-    fn size() -> usize {
+    fn size(&self) -> usize {
         Self::PAGE_SIZE
     }
 
